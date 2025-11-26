@@ -51,6 +51,9 @@ importers:
       express-validator:
         specifier: ^7.2.1
         version: 7.2.1
+      i18next:
+        specifier: ^24.2.3
+        version: 24.2.3(typescript@5.9.2)
       i18next-fs-backend:
         specifier: ^2.6.0
         version: 2.6.0
@@ -169,9 +172,6 @@ importers:
       eslint:
         specifier: ^8.57.1
         version: 8.57.1
-      i18next:
-        specifier: ^24.2.3
-        version: 24.2.3(typescript@5.9.2)
       i18next-browser-languagedetector:
         specifier: ^8.2.0
         version: 8.2.0

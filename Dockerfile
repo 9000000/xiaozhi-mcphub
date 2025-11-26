@@ -22,7 +22,7 @@ FROM base AS deps
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Stage 3: Build application
 FROM base AS builder
@@ -87,7 +87,7 @@ WORKDIR /app
 
 # Copy only production dependencies
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
