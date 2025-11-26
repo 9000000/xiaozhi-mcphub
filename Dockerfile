@@ -1,3 +1,4 @@
+# Stage 1: Base dependencies
 FROM python:3.13-slim-bookworm AS base
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -15,11 +16,55 @@ RUN apt-get update && apt-get install -y curl gnupg git \
 
 RUN npm install -g pnpm
 
+# Stage 2: Build dependencies
+FROM base AS deps
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Stage 3: Build application
+FROM base AS builder
+
+ARG REQUEST_TIMEOUT=60000
+ARG BASE_PATH=""
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+COPY --from=deps /app/node_modules ./node_modules
+
+COPY . .
+
+# Download the latest servers.json from mcpm.sh and replace the existing file
+RUN curl -s -f --connect-timeout 10 https://mcpm.sh/api/servers.json -o servers.json || echo "Failed to download servers.json, using bundled version"
+
+RUN pnpm frontend:build && pnpm build
+
+# Stage 4: Production runtime
+FROM python:3.13-slim-bookworm AS runtime
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# 添加 HTTP_PROXY 和 HTTPS_PROXY 环境变量
+ARG HTTP_PROXY=""
+ARG HTTPS_PROXY=""
+ENV HTTP_PROXY=$HTTP_PROXY
+ENV HTTPS_PROXY=$HTTPS_PROXY
+
 ARG REQUEST_TIMEOUT=60000
 ENV REQUEST_TIMEOUT=$REQUEST_TIMEOUT
 
 ARG BASE_PATH=""
 ENV BASE_PATH=$BASE_PATH
+
+RUN apt-get update && apt-get install -y curl gnupg git \
+  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+  && apt-get install -y nodejs \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g pnpm
 
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -40,15 +85,14 @@ RUN uv tool install mcp-server-fetch
 
 WORKDIR /app
 
+# Copy only production dependencies
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install
+RUN pnpm install --prod --frozen-lockfile
 
-COPY . .
-
-# Download the latest servers.json from mcpm.sh and replace the existing file
-RUN curl -s -f --connect-timeout 10 https://mcpm.sh/api/servers.json -o servers.json || echo "Failed to download servers.json, using bundled version"
-
-RUN pnpm frontend:build && pnpm build
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/frontend/dist ./frontend/dist
+COPY --from=builder /app/servers.json ./servers.json
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
